@@ -30,7 +30,8 @@ def _load_whisper_model() -> WhisperModel:
     """Load Whisper model, preferring CUDA if available."""
     try:
         import ctranslate2
-        if "cuda" in ctranslate2.get_supported_compute_types("cuda"):
+        cuda_types = ctranslate2.get_supported_compute_types("cuda")
+        if "float16" in cuda_types:
             return WhisperModel(MODEL_SIZE, device="cuda", compute_type="float16")
     except Exception:
         pass
