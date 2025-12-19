@@ -26,6 +26,18 @@ def get_audio_duration(audio_path: Path) -> float:
     return len(audio) / 16000  # 16kHz sample rate
 
 
+def _load_whisper_model() -> WhisperModel:
+    """Load Whisper model, preferring CUDA if available."""
+    try:
+        import ctranslate2
+        if "cuda" in ctranslate2.get_supported_compute_types("cuda"):
+            return WhisperModel(MODEL_SIZE, device="cuda", compute_type="float16")
+    except Exception:
+        pass
+    print("CUDA not available, using CPU...")
+    return WhisperModel(MODEL_SIZE, device="cpu", compute_type="int8")
+
+
 def merge_segments_by_pause(
     segments: list[Segment], pause_threshold: float
 ) -> list[list[Segment]]:
@@ -91,11 +103,7 @@ def transcribe_audio(
 
     # Load model
     print("Loading Whisper model...")
-    try:
-        whisper_model = WhisperModel(MODEL_SIZE, device="cuda", compute_type="float16")
-    except Exception as e:
-        print(f"CUDA loading failed ({e}), falling back to CPU...")
-        whisper_model = WhisperModel(MODEL_SIZE, device="cpu", compute_type="int8")
+    whisper_model = _load_whisper_model()
 
     # Process chunks
     print(f"\nTranscribing {num_chunks} chunks...")
