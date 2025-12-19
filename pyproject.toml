@@ -7,5 +7,6 @@ requires-python = ">=3.13"
 dependencies = [
     "faster-whisper>=1.2.1",
     "pyannote-audio>=3.1",
+    "python-dotenv>=1.2.1",
     "tqdm>=4.66",
 ]

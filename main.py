@@ -2,8 +2,12 @@ import argparse
 import sys
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 from remap import remap_speakers
 from transcriber import transcribe_audio
+
+load_dotenv()
 
 
 def cmd_transcribe(args: argparse.Namespace) -> int:
