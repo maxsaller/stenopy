@@ -12,11 +12,11 @@ from checkpoint import (
     save_checkpoint,
     validate_checkpoint,
 )
-from diarization import get_diarization_pipeline, run_diarization
 
 
 CHUNK_DURATION = 30 * 60  # 30 minutes in seconds
 MODEL_SIZE = "large-v3"
+DEFAULT_PAUSE_THRESHOLD = 2.0
 
 
 def get_audio_duration(audio_path: Path) -> float:
@@ -26,34 +26,40 @@ def get_audio_duration(audio_path: Path) -> float:
     return len(audio) / 16000  # 16kHz sample rate
 
 
-def assign_speaker_to_segment(
-    seg_start: float,
-    seg_end: float,
-    diarization_segments: list[tuple[float, float, int]],
-) -> int:
-    """Find the speaker with most overlap for a given transcription segment."""
-    best_speaker = 0
-    best_overlap = 0.0
+def merge_segments_by_pause(
+    segments: list[Segment], pause_threshold: float
+) -> list[list[Segment]]:
+    """
+    Merge segments into paragraphs based on pause gaps.
 
-    for d_start, d_end, speaker in diarization_segments:
-        overlap_start = max(seg_start, d_start)
-        overlap_end = min(seg_end, d_end)
-        overlap = max(0, overlap_end - overlap_start)
+    Returns list of paragraphs, where each paragraph is a list of segments.
+    """
+    if not segments:
+        return []
 
-        if overlap > best_overlap:
-            best_overlap = overlap
-            best_speaker = speaker
+    paragraphs = []
+    current: list[Segment] = []
 
-    return best_speaker
+    for seg in segments:
+        if current and (seg.start - current[-1].end) > pause_threshold:
+            paragraphs.append(current)
+            current = []
+        current.append(seg)
+
+    if current:
+        paragraphs.append(current)
+
+    return paragraphs
 
 
 def transcribe_audio(
     audio_path: Path,
-    num_speakers: int,
     output_path: Path | None = None,
+    pause_threshold: float = DEFAULT_PAUSE_THRESHOLD,
+    include_timestamps: bool = False,
 ) -> Path:
     """
-    Transcribe audio file with speaker diarization.
+    Transcribe audio file with pause-based paragraph detection.
 
     Returns path to output transcript file.
     """
@@ -63,7 +69,7 @@ def transcribe_audio(
     # Check for existing checkpoint
     checkpoint = load_checkpoint(audio_path)
     if checkpoint is not None:
-        valid, msg = validate_checkpoint(checkpoint, audio_path, num_speakers)
+        valid, msg = validate_checkpoint(checkpoint, audio_path, pause_threshold)
         if not valid:
             print(f"Checkpoint invalid: {msg}")
             print("Starting fresh...")
@@ -74,7 +80,7 @@ def transcribe_audio(
         checkpoint = Checkpoint(
             audio_file=str(audio_path),
             audio_hash=compute_audio_hash(audio_path),
-            num_speakers=num_speakers,
+            pause_threshold=pause_threshold,
         )
     else:
         print(f"Resuming from checkpoint (chunks completed: {len(checkpoint.completed_chunks)})")
@@ -83,20 +89,13 @@ def transcribe_audio(
     duration = get_audio_duration(audio_path)
     num_chunks = int(duration // CHUNK_DURATION) + (1 if duration % CHUNK_DURATION > 0 else 0)
 
-    # Load models
+    # Load model
     print("Loading Whisper model...")
     try:
         whisper_model = WhisperModel(MODEL_SIZE, device="cuda", compute_type="float16")
     except Exception as e:
         print(f"CUDA loading failed ({e}), falling back to CPU...")
         whisper_model = WhisperModel(MODEL_SIZE, device="cpu", compute_type="int8")
-
-    print("Loading diarization pipeline...")
-    diarization_pipeline = get_diarization_pipeline()
-
-    # Run diarization on full audio (pyannote handles this efficiently)
-    print("Running speaker diarization...")
-    diarization_segments = run_diarization(audio_path, num_speakers, diarization_pipeline)
 
     # Process chunks
     print(f"\nTranscribing {num_chunks} chunks...")
@@ -108,32 +107,28 @@ def transcribe_audio(
         chunk_end = min((chunk_idx + 1) * CHUNK_DURATION, duration)
 
         # Transcribe chunk
-        # For single chunk or first chunk, transcribe the whole file
-        # For subsequent chunks, we'd need to handle seeking (not yet implemented)
         segments, _ = whisper_model.transcribe(
             str(audio_path),
             language="en",
         )
 
-        # Process segments and assign speakers
+        # Collect segments for this chunk
         for seg in segments:
             if chunk_idx > 0 and seg.start < chunk_start:
                 continue
             if seg.end > chunk_end:
                 break
 
-            speaker = assign_speaker_to_segment(
-                seg.start, seg.end, diarization_segments
-            )
             checkpoint.segments.append(
-                Segment(start=seg.start, end=seg.end, speaker=speaker, text=seg.text.strip())
+                Segment(start=seg.start, end=seg.end, text=seg.text.strip())
             )
 
         checkpoint.completed_chunks.append(chunk_idx)
         save_checkpoint(checkpoint, audio_path)
 
-    # Write final output
-    write_transcript(checkpoint.segments, output_path)
+    # Merge segments into paragraphs and write output
+    paragraphs = merge_segments_by_pause(checkpoint.segments, pause_threshold)
+    write_transcript(paragraphs, output_path, include_timestamps)
     delete_checkpoint(audio_path)
 
     print(f"\nTranscription complete: {output_path}")
@@ -148,10 +143,22 @@ def format_timestamp(seconds: float) -> str:
     return f"{hours:02d}:{minutes:02d}:{secs:02d}"
 
 
-def write_transcript(segments: list[Segment], output_path: Path) -> None:
-    """Write segments to transcript file."""
+def write_transcript(
+    paragraphs: list[list[Segment]],
+    output_path: Path,
+    include_timestamps: bool = False,
+) -> None:
+    """Write paragraphs to transcript file."""
     with open(output_path, "w") as f:
-        for seg in segments:
-            start = format_timestamp(seg.start)
-            end = format_timestamp(seg.end)
-            f.write(f"[{start} - {end}] Speaker {seg.speaker}: {seg.text}\n")
+        for para in paragraphs:
+            if not para:
+                continue
+
+            # Combine segment texts into paragraph
+            text = " ".join(seg.text for seg in para)
+
+            if include_timestamps:
+                timestamp = format_timestamp(para[0].start)
+                f.write(f"[{timestamp}] {text}\n\n")
+            else:
+                f.write(f"{text}\n\n")
