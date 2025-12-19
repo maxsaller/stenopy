@@ -1,12 +1,11 @@
 [project]
 name = "transcription"
-version = "0.1.0"
-description = "D&D session transcription with speaker diarization"
+version = "0.2.0"
+description = "D&D session transcription with pause-based paragraph detection"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "faster-whisper>=1.2.1",
-    "pyannote-audio>=3.1",
     "python-dotenv>=1.2.1",
     "tqdm>=4.66",
 ]
