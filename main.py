@@ -4,8 +4,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from remap import remap_speakers
-from transcriber import transcribe_audio
+from transcriber import transcribe_audio, DEFAULT_PAUSE_THRESHOLD
 
 load_dotenv()
 
@@ -19,63 +18,42 @@ def cmd_transcribe(args: argparse.Namespace) -> int:
     output_path = Path(args.output) if args.output else None
 
     try:
-        transcribe_audio(audio_path, args.speakers, output_path)
+        transcribe_audio(
+            audio_path,
+            output_path=output_path,
+            pause_threshold=args.pause_threshold,
+            include_timestamps=args.timestamps,
+        )
         return 0
     except RuntimeError as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
 
 
-def cmd_remap(args: argparse.Namespace) -> int:
-    transcript_path = Path(args.transcript_file)
-    if not transcript_path.exists():
-        print(f"Error: Transcript file not found: {transcript_path}", file=sys.stderr)
-        return 1
-
-    names = [n.strip() for n in args.names.split(",")]
-
-    try:
-        remap_speakers(transcript_path, names)
-        return 0
-    except ValueError as e:
-        print(f"Error: {e}", file=sys.stderr)
-        return 1
-
-
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Transcribe audio files with speaker diarization"
+        description="Transcribe audio files with pause-based paragraph detection"
     )
-    subparsers = parser.add_subparsers(dest="command", required=True)
 
-    # Transcribe command
-    transcribe_parser = subparsers.add_parser(
-        "transcribe", help="Transcribe an audio file"
-    )
-    transcribe_parser.add_argument("audio_file", help="Path to audio file")
-    transcribe_parser.add_argument(
-        "--speakers", "-s", type=int, required=True,
-        help="Number of speakers in the recording"
-    )
-    transcribe_parser.add_argument(
+    parser.add_argument("audio_file", help="Path to audio file")
+    parser.add_argument(
         "--output", "-o",
         help="Output transcript path (default: <audio>_transcript.txt)"
     )
-    transcribe_parser.set_defaults(func=cmd_transcribe)
-
-    # Remap command
-    remap_parser = subparsers.add_parser(
-        "remap", help="Remap speaker labels to names"
+    parser.add_argument(
+        "--timestamps", "-t",
+        action="store_true",
+        help="Include timestamps at the start of each paragraph"
     )
-    remap_parser.add_argument("transcript_file", help="Path to transcript file")
-    remap_parser.add_argument(
-        "--names", "-n", required=True,
-        help="Comma-separated speaker names (e.g., 'DM,Alice,Bob')"
+    parser.add_argument(
+        "--pause-threshold", "-p",
+        type=float,
+        default=DEFAULT_PAUSE_THRESHOLD,
+        help=f"Pause duration (seconds) that triggers a paragraph break (default: {DEFAULT_PAUSE_THRESHOLD})"
     )
-    remap_parser.set_defaults(func=cmd_remap)
 
     args = parser.parse_args()
-    return args.func(args)
+    return cmd_transcribe(args)
 
 
 if __name__ == "__main__":
