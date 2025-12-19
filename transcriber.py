@@ -85,7 +85,11 @@ def transcribe_audio(
 
     # Load models
     print("Loading Whisper model...")
-    whisper_model = WhisperModel(MODEL_SIZE, device="cuda", compute_type="float16")
+    try:
+        whisper_model = WhisperModel(MODEL_SIZE, device="cuda", compute_type="float16")
+    except Exception as e:
+        print(f"CUDA loading failed ({e}), falling back to CPU...")
+        whisper_model = WhisperModel(MODEL_SIZE, device="cpu", compute_type="int8")
 
     print("Loading diarization pipeline...")
     diarization_pipeline = get_diarization_pipeline()
@@ -104,10 +108,11 @@ def transcribe_audio(
         chunk_end = min((chunk_idx + 1) * CHUNK_DURATION, duration)
 
         # Transcribe chunk
+        # For single chunk or first chunk, transcribe the whole file
+        # For subsequent chunks, we'd need to handle seeking (not yet implemented)
         segments, _ = whisper_model.transcribe(
             str(audio_path),
             language="en",
-            clip_timestamps=[chunk_start, chunk_end] if chunk_idx > 0 else None,
         )
 
         # Process segments and assign speakers
