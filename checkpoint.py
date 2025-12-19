@@ -8,7 +8,6 @@ from pathlib import Path
 class Segment:
     start: float
     end: float
-    speaker: int
     text: str
 
 
@@ -16,7 +15,7 @@ class Segment:
 class Checkpoint:
     audio_file: str
     audio_hash: str
-    num_speakers: int
+    pause_threshold: float
     completed_chunks: list[int] = field(default_factory=list)
     segments: list[Segment] = field(default_factory=list)
 
@@ -24,7 +23,7 @@ class Checkpoint:
         return {
             "audio_file": self.audio_file,
             "audio_hash": self.audio_hash,
-            "num_speakers": self.num_speakers,
+            "pause_threshold": self.pause_threshold,
             "completed_chunks": self.completed_chunks,
             "segments": [asdict(s) for s in self.segments],
         }
@@ -35,7 +34,7 @@ class Checkpoint:
         return cls(
             audio_file=data["audio_file"],
             audio_hash=data["audio_hash"],
-            num_speakers=data["num_speakers"],
+            pause_threshold=data["pause_threshold"],
             completed_chunks=data.get("completed_chunks", []),
             segments=segments,
         )
@@ -48,7 +47,6 @@ def get_checkpoint_path(audio_path: Path) -> Path:
 def compute_audio_hash(audio_path: Path) -> str:
     hasher = hashlib.md5()
     with open(audio_path, "rb") as f:
-        # Read first 10MB for hash (enough to detect changes, fast for large files)
         hasher.update(f.read(10 * 1024 * 1024))
     return hasher.hexdigest()
 
@@ -74,11 +72,11 @@ def delete_checkpoint(audio_path: Path) -> None:
 
 
 def validate_checkpoint(
-    checkpoint: Checkpoint, audio_path: Path, num_speakers: int
+    checkpoint: Checkpoint, audio_path: Path, pause_threshold: float
 ) -> tuple[bool, str]:
     current_hash = compute_audio_hash(audio_path)
     if checkpoint.audio_hash != current_hash:
         return False, "Audio file has changed since checkpoint was created"
-    if checkpoint.num_speakers != num_speakers:
-        return False, f"Speaker count mismatch: checkpoint has {checkpoint.num_speakers}, requested {num_speakers}"
+    if checkpoint.pause_threshold != pause_threshold:
+        return False, f"Pause threshold mismatch: checkpoint has {checkpoint.pause_threshold}, requested {pause_threshold}"
     return True, ""
