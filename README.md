@@ -1,12 +1,13 @@
 # D&D Session Transcription
 
-Transcribe long audio recordings with speaker diarization. Designed for D&D sessions but works with any multi-speaker audio.
+Transcribe long audio recordings into clean paragraphs. Designed for D&D sessions - output is optimized for downstream LLM processing to infer speakers from context.
 
 ## Features
 
-- Speaker diarization (who said what)
+- Pause-based paragraph detection
 - Checkpoint/resume for long recordings
-- Speaker name remapping
+- Optional timestamps
+- Configurable pause threshold
 
 ## Setup
 
@@ -15,57 +16,56 @@ Transcribe long audio recordings with speaker diarization. Designed for D&D sess
    uv sync
    ```
 
-2. Set up HuggingFace token for pyannote:
-   - Create account at https://huggingface.co
-   - Accept terms at:
-     - https://huggingface.co/pyannote/speaker-diarization-3.1
-     - https://huggingface.co/pyannote/segmentation-3.0
-     - https://huggingface.co/pyannote/speaker-diarization-community-1
-   - Create token at https://huggingface.co/settings/tokens
-   - Create `.env` file:
-     ```bash
-     echo "HF_TOKEN=hf_xxxxx" > .env
-     ```
-
 ## Usage
 
-### Transcribe
+### Basic Transcription
 
 ```bash
-uv run python main.py transcribe session.mp3 --speakers 5
+uv run python main.py session.wav
 ```
 
-Options:
-- `--speakers, -s`: Number of speakers (required)
-- `--output, -o`: Output file path (default: `<audio>_transcript.txt`)
+Output: Clean paragraphs separated by blank lines.
 
-### Remap Speaker Names
-
-After reviewing the transcript to identify who is Speaker 0, Speaker 1, etc:
+### With Timestamps
 
 ```bash
-uv run python main.py remap session_transcript.txt --names "DM,Alice,Bob,Carol,Dave"
+uv run python main.py session.wav --timestamps
 ```
 
-## Output Format
+Output:
+```
+[00:00:15] Alright everyone, welcome back. Last session you were in the tavern.
 
-```
-[00:00:15 - 00:00:23] Speaker 0: Alright everyone, welcome back.
-[00:00:24 - 00:00:28] Speaker 2: I want to talk to the bartender.
+[00:00:45] I want to talk to the bartender about the rumors.
 ```
 
-After remapping:
+### Custom Pause Threshold
+
+Default is 2 seconds. Increase for fewer, longer paragraphs:
+
+```bash
+uv run python main.py session.wav --pause-threshold 3.0
 ```
-[00:00:15 - 00:00:23] DM: Alright everyone, welcome back.
-[00:00:24 - 00:00:28] Alice: I want to talk to the bartender.
+
+### All Options
+
+```bash
+uv run python main.py session.wav --timestamps --pause-threshold 1.5 --output notes.txt
 ```
+
+## Options
+
+| Option | Short | Description |
+|--------|-------|-------------|
+| `--output` | `-o` | Output file path (default: `<audio>_transcript.txt`) |
+| `--timestamps` | `-t` | Include timestamps at paragraph start |
+| `--pause-threshold` | `-p` | Seconds of silence for paragraph break (default: 2.0) |
 
 ## Resume After Interruption
 
-If transcription is interrupted, simply run the same command again. Progress is saved in checkpoint files and will resume automatically.
+If transcription is interrupted, run the same command again. Progress is saved in checkpoint files.
 
 ## Requirements
 
 - Python 3.13+
-- NVIDIA GPU with CUDA (recommended for faster processing)
-- HuggingFace account with access to pyannote models
+- NVIDIA GPU with CUDA (recommended)
