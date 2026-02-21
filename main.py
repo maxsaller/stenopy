@@ -2,11 +2,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from dotenv import load_dotenv
-
 from transcriber import transcribe_audio, DEFAULT_PAUSE_THRESHOLD
-
-load_dotenv()
 
 
 def cmd_transcribe(args: argparse.Namespace) -> int:
