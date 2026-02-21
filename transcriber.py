@@ -26,10 +26,33 @@ def get_audio_duration(audio_path: Path) -> float:
     return len(audio) / 16000  # 16kHz sample rate
 
 
+def _preload_cuda_libs() -> None:
+    """Preload cuDNN/cuBLAS from pip-installed nvidia packages.
+
+    ctranslate2 uses dlopen() which only searches system paths.
+    Preloading via ctypes makes the libs available process-wide.
+    """
+    import ctypes
+
+    for pkg in ("nvidia.cudnn", "nvidia.cublas"):
+        try:
+            mod = __import__(pkg, fromlist=["_"])
+            lib_dir = Path(mod.__path__[0]) / "lib"
+            if lib_dir.is_dir():
+                for so in sorted(lib_dir.glob("*.so*")):
+                    try:
+                        ctypes.CDLL(str(so))
+                    except OSError:
+                        pass
+        except ImportError:
+            pass
+
+
 def _load_whisper_model() -> WhisperModel:
     """Load Whisper model, preferring CUDA if available."""
     try:
         import ctranslate2
+        _preload_cuda_libs()
         cuda_types = ctranslate2.get_supported_compute_types("cuda")
         if "float16" in cuda_types:
             return WhisperModel(MODEL_SIZE, device="cuda", compute_type="float16")

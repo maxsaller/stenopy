@@ -83,7 +83,7 @@ sudo apt-get update && sudo apt-get install -y ffmpeg
 
 GPU acceleration makes transcription **5-10x faster**. Without a GPU, the tool falls back to CPU (int8 quantization) automatically.
 
-If you have an NVIDIA GPU, ensure you have the proprietary drivers installed:
+cuDNN and cuBLAS are bundled as Python dependencies (`nvidia-cudnn-cu12`, `nvidia-cublas-cu12`) and installed automatically by `uv sync` on Linux — **no manual CUDA toolkit or cuDNN installation required**. You only need the NVIDIA GPU drivers.
 
 <details>
 <summary><strong>Arch Linux</strong></summary>
@@ -249,7 +249,7 @@ The model loader automatically detects CUDA capability:
 | GPU | `cuda` | `float16` | ~10 min per hour of audio |
 | CPU | `cpu` | `int8` | ~60-120 min per hour of audio |
 
-Detection checks for `float16` support via `ctranslate2.get_supported_compute_types("cuda")`. If CUDA is unavailable or fails, it silently falls back to CPU.
+Detection checks for `float16` support via `ctranslate2.get_supported_compute_types("cuda")`. cuDNN and cuBLAS libraries are preloaded from pip-installed `nvidia-cudnn-cu12` / `nvidia-cublas-cu12` packages at runtime, so no system-level CUDA toolkit or cuDNN installation is needed. If CUDA is unavailable or fails, it silently falls back to CPU.
 
 ## Troubleshooting
 
@@ -295,6 +295,6 @@ transcription/
 
 - **Python**: 3.13+ (automatically managed by uv)
 - **FFmpeg**: Required for audio decoding
-- **Disk**: ~4 GB for the Whisper model cache
+- **Disk**: ~4 GB for the Whisper model cache, ~1.2 GB for cuDNN/cuBLAS packages
 - **RAM**: 4 GB minimum, 8 GB+ recommended for GPU mode
-- **GPU** (optional): NVIDIA with CUDA support (any modern GeForce/RTX/Quadro)
+- **GPU** (optional): NVIDIA with drivers installed — cuDNN and cuBLAS are bundled as pip dependencies (Linux only)
